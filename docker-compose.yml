@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # 1. Backend Kita
+  app:
+    build: .
+    container_name: besq-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      # Koneksi ke Database menggunakan nama service 'db' bukan 'localhost'
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=besq_db
+      - JWT_SECRET=RAHASIA_SUPER_AMAN_PT_BESQ
+    restart: always
+
+  # 2. Database MariaDB
+  db:
+    image: mariadb:10.6
+    container_name: besq-db
+    environment:
+      - MARIADB_ROOT_PASSWORD=root
+      - MARIADB_DATABASE=besq_db
+    ports:
+      # Kita pakai port 3307 di laptop biar gak bentrok sama XAMPP/HeidiSQL yang jalan di 3306
+      - "3307:3306"
+    volumes:
+      - besq_data:/var/lib/mysql
+      # Auto-import database saat pertama kali jalan
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  besq_data:
