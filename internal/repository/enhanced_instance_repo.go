@@ -246,14 +246,14 @@ func (r *EnhancedInstanceRepository) GetProductionStats(startDate, endDate *time
 		args = append(args, startDate, endDate)
 	}
 
-	// Get total counts - FIXED: Added table alias 'i.'
+	// Get total counts - FIXED: Added proper alias and handle NULL values
 	query := fmt.Sprintf(`
 		SELECT 
 			COUNT(*) as total,
-			SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-			SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
-			SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-			COALESCE(AVG(i.duration_minutes), 0) as avg_duration
+			SUM(CASE WHEN i.status = 'completed' THEN 1 ELSE 0 END) as completed,
+			SUM(CASE WHEN i.status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+			SUM(CASE WHEN i.status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+			COALESCE(AVG(CASE WHEN i.duration_minutes IS NOT NULL THEN i.duration_minutes ELSE 0 END), 0) as avg_duration
 		FROM process_instances i
 		%s
 	`, dateFilter)
@@ -293,10 +293,10 @@ func (r *EnhancedInstanceRepository) GetProductionStats(startDate, endDate *time
 
 	// Get by status
 	query = fmt.Sprintf(`
-		SELECT status, COUNT(*) as count
+		SELECT i.status, COUNT(*) as count
 		FROM process_instances i
 		%s
-		GROUP BY status
+		GROUP BY i.status
 		ORDER BY count DESC
 	`, dateFilter)
 
@@ -313,10 +313,10 @@ func (r *EnhancedInstanceRepository) GetProductionStats(startDate, endDate *time
 
 	// Get by priority
 	query = fmt.Sprintf(`
-		SELECT priority, COUNT(*) as count
+		SELECT i.priority, COUNT(*) as count
 		FROM process_instances i
 		%s
-		GROUP BY priority
+		GROUP BY i.priority
 		ORDER BY count DESC
 	`, dateFilter)
 
