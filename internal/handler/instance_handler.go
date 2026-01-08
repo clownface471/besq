@@ -38,35 +38,39 @@ func (h *InstanceHandler) CreateInstance(c *gin.Context) {
 		return
 	}
 
+	// Get field definitions
 	fields, err := repository.GetFieldDefs(req.TemplateID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Template tidak valid"})
 		return
 	}
 
-	// Memanggil Repo ValidateInput
+	// Validate input
 	if err := h.Repo.ValidateInput(req.Data, fields); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Convert data to JSON
 	jsonBytes, _ := json.Marshal(req.Data)
 	
-	// Memanggil Repo SaveInstance
+	// Save instance
 	id, err := h.Repo.SaveInstance(req.WorkflowID, req.TemplateID, jsonBytes)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menyimpan data"})
 		return
 	}
 
-	// Kirim pesan ke WebSocket (Struct Message sudah didefinisikan di Hub)
+	// Broadcast via WebSocket using new Message structure
 	msg := websocket.Message{
-		Event:      "new_data",
-		InstanceID: int(id),
-		WorkflowID: req.WorkflowID,
-		TemplateID: req.TemplateID,
-		Status:     "draft",
-		Timestamp:  time.Now(),
+		Event: "new_instance",
+		Data: map[string]interface{}{
+			"instance_id": id,
+			"workflow_id": req.WorkflowID,
+			"template_id": req.TemplateID,
+			"status":      "draft",
+		},
+		Timestamp: time.Now(),
 	}
 	h.Hub.Broadcast <- msg
 
@@ -87,7 +91,9 @@ func (h *InstanceHandler) GetList(c *gin.Context) {
 	page, _ := strconv.Atoi(pageStr)
 	limit, _ := strconv.Atoi(limitStr)
 
-	if page < 1 { page = 1 }
+	if page < 1 {
+		page = 1
+	}
 	offset := (page - 1) * limit
 
 	logs, err := h.Repo.GetHistory(limit, offset, templateID, dateStr)
@@ -125,7 +131,7 @@ func (h *InstanceHandler) ExportExcel(c *gin.Context) {
 	sheet := "Data Produksi"
 	index, _ := f.NewSheet(sheet)
 	f.SetActiveSheet(index)
-	f.DeleteSheet("Sheet1") 
+	f.DeleteSheet("Sheet1")
 
 	headers := []string{"ID", "Waktu", "Proses", "Workflow", "Status", "Data JSON"}
 	for i, header := range headers {
@@ -146,8 +152,7 @@ func (h *InstanceHandler) ExportExcel(c *gin.Context) {
 	filename := fmt.Sprintf("Laporan_%s.xlsx", time.Now().Format("20060102"))
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	
-	// FIX: WriteTo mengembalikan 2 value (int64, error). Kita pakai underscore (_)
+
 	if _, err := f.WriteTo(c.Writer); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal generate file"})
 	}
